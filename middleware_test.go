@@ -165,15 +165,17 @@ func TestErrorHandling(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest("GET", "/", nil)
 
-		janice.ErrorHandling().Then(h).ServeHTTP(rec, req)
-
-		if rec.Code != tt.code {
-			t.Errorf("ErrorHandling(%d); got %d, expected %d", tn, rec.Code, tt.code)
-		}
+		err := janice.ErrorHandling()(h)(rec, req)
 
 		b := new(bytes.Buffer)
 		b.ReadFrom(rec.Body)
 
+		if err != nil {
+			t.Errorf("ErrorHandling(%d); got %v, expected nil", tn, err)
+		}
+		if rec.Code != tt.code {
+			t.Errorf("ErrorHandling(%d); got %d, expected %d", tn, rec.Code, tt.code)
+		}
 		if b.String() != tt.exp {
 			t.Errorf("ErrorHandling(%d); got %s, expected %s", tn, b.String(), tt.exp)
 		}
@@ -191,7 +193,7 @@ func TestErrorLogging(t *testing.T) {
 		},
 		{
 			err:  errors.New("error"),
-			code: http.StatusInternalServerError,
+			code: http.StatusOK,
 			exp:  "error\n",
 		},
 	}
@@ -207,8 +209,11 @@ func TestErrorLogging(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest("GET", "/", nil)
 
-		janice.ErrorLogging(l).Then(h).ServeHTTP(rec, req)
+		err := janice.ErrorLogging(l)(h)(rec, req)
 
+		if err != tt.err {
+			t.Errorf("ErrorLogging(%d); got %v, expected %v", tn, err, tt.err)
+		}
 		if rec.Code != tt.code {
 			t.Errorf("ErrorLogging(%d); got %d, expected %d", tn, rec.Code, tt.code)
 		}

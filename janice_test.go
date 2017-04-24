@@ -150,20 +150,20 @@ func TestMiddlewareAppend(t *testing.T) {
 		exp string
 	}{
 		{
-			mwm: []string{"m"},
-			msg: "h",
-			exp: "mh",
+			mwm: []string{"a"},
+			msg: "b",
+			exp: "ab",
 		},
 		{
 			mwm: []string{"a", "b"},
-			msg: "h",
-			exp: "abh",
+			msg: "c",
+			exp: "abc",
 		},
 		{
 			mwm: []string{"a", "b"},
-			msg: "h",
+			msg: "c",
 			err: errors.New("error"),
-			exp: "abh",
+			exp: "abc",
 		},
 	}
 
@@ -188,7 +188,7 @@ func TestMiddlewareAppend(t *testing.T) {
 			t.Errorf("Append(%d); got %v, expected %v", tn, err, tt.err)
 		}
 		if b.String() != tt.exp {
-			t.Errorf("MiddlewareFunc(%d); got %s, expected %s", tn, b.String(), tt.exp)
+			t.Errorf("Append(%d); got %s, expected %s", tn, b.String(), tt.exp)
 		}
 	}
 }
@@ -202,17 +202,17 @@ func TestMiddlewareThen(t *testing.T) {
 		exp  string
 	}{
 		{
-			mwm:  "m",
-			msg:  "h",
+			mwm:  "a",
+			msg:  "b",
 			code: http.StatusOK,
-			exp:  "mh",
+			exp:  "ab",
 		},
 		{
-			mwm:  "m",
-			msg:  "h",
+			mwm:  "a",
+			msg:  "b",
 			err:  errors.New("error"),
 			code: http.StatusInternalServerError,
-			exp:  "mh",
+			exp:  "ab",
 		},
 	}
 
