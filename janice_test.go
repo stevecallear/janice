@@ -106,7 +106,7 @@ func TestNew(t *testing.T) {
 		janice.New(mw...).Then(newHandler(b, tt.msg, nil)).ServeHTTP(rec, req)
 
 		if b.String() != tt.exp {
-			t.Errorf("Handler(%d); got %s, expected %s", tn, b.String(), tt.exp)
+			t.Errorf("New(%d); got %s, expected %s", tn, b.String(), tt.exp)
 		}
 	}
 }
@@ -144,26 +144,31 @@ func TestWrap(t *testing.T) {
 
 func TestMiddlewareAppend(t *testing.T) {
 	tests := []struct {
-		mwm []string
+		mwm [][]string
 		msg string
 		err error
 		exp string
 	}{
 		{
-			mwm: []string{"a"},
-			msg: "b",
-			exp: "ab",
+			mwm: [][]string{[]string{}},
+			msg: "a",
+			exp: "a",
 		},
 		{
-			mwm: []string{"a", "b"},
+			mwm: [][]string{[]string{"a"}, []string{"b"}},
 			msg: "c",
 			exp: "abc",
 		},
 		{
-			mwm: []string{"a", "b"},
-			msg: "c",
+			mwm: [][]string{[]string{"a"}, []string{"b", "c"}},
+			msg: "d",
+			exp: "abcd",
+		},
+		{
+			mwm: [][]string{[]string{"a"}, []string{"b", "c"}},
+			msg: "d",
 			err: errors.New("error"),
-			exp: "abc",
+			exp: "abcd",
 		},
 	}
 
@@ -171,11 +176,11 @@ func TestMiddlewareAppend(t *testing.T) {
 		b := new(bytes.Buffer)
 
 		var mw janice.MiddlewareFunc
-		for i, msg := range tt.mwm {
+		for i, ms := range tt.mwm {
 			if i == 0 {
-				mw = newMiddleware(b, msg)
+				mw = janice.New(newMiddlewareSlice(b, ms)...)
 			} else {
-				mw = mw.Append(newMiddleware(b, msg))
+				mw = mw.Append(newMiddlewareSlice(b, ms)...)
 			}
 		}
 
@@ -239,6 +244,14 @@ func newHandler(log io.Writer, msg string, err error) janice.HandlerFunc {
 		fmt.Fprint(log, msg)
 		return err
 	}
+}
+
+func newMiddlewareSlice(log io.Writer, msgs []string) []janice.MiddlewareFunc {
+	fns := []janice.MiddlewareFunc{}
+	for _, msg := range msgs {
+		fns = append(fns, newMiddleware(log, msg))
+	}
+	return fns
 }
 
 func newMiddleware(log io.Writer, msg string) janice.MiddlewareFunc {
