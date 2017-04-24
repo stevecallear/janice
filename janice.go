@@ -21,18 +21,7 @@ func Default() MiddlewareFunc {
 
 // New returns a new middleware pipe
 func New(m ...MiddlewareFunc) MiddlewareFunc {
-	if len(m) < 1 {
-		return func(h HandlerFunc) HandlerFunc {
-			return h
-		}
-	}
-
-	r := m[0]
-	for _, v := range m[1:] {
-		r = r.Append(v)
-	}
-
-	return r
+	return composite(m)
 }
 
 // Wrap wraps the specified handler, allowing it to be used with middleware
@@ -44,10 +33,8 @@ func Wrap(h http.Handler) HandlerFunc {
 }
 
 // Append appends the specified middleware funcs to the pipe
-func (m MiddlewareFunc) Append(n MiddlewareFunc) MiddlewareFunc {
-	return func(h HandlerFunc) HandlerFunc {
-		return m(n(h))
-	}
+func (m MiddlewareFunc) Append(n ...MiddlewareFunc) MiddlewareFunc {
+	return composite(append([]MiddlewareFunc{m}, n...))
 }
 
 // Then terminates the middleware pipe with the specified handler func
@@ -57,4 +44,14 @@ func (m MiddlewareFunc) Then(h HandlerFunc) http.Handler {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	})
+}
+
+func composite(fns []MiddlewareFunc) MiddlewareFunc {
+	return func(h HandlerFunc) HandlerFunc {
+		for i := len(fns) - 1; i >= 0; i-- {
+			h = fns[i](h)
+		}
+
+		return h
+	}
 }
