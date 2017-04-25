@@ -10,18 +10,9 @@ type (
 	MiddlewareFunc func(HandlerFunc) HandlerFunc
 )
 
-// Default returns a default middleware pipe
-func Default() MiddlewareFunc {
-	return New(
-		Recovery(ErrorLogger),
-		RequestLogging(RequestLogger),
-		ErrorHandling(),
-		ErrorLogging(ErrorLogger))
-}
-
 // New returns a new middleware pipe
 func New(m ...MiddlewareFunc) MiddlewareFunc {
-	return composite(m)
+	return combine(m)
 }
 
 // Wrap wraps the specified handler, allowing it to be used with middleware
@@ -34,22 +25,24 @@ func Wrap(h http.Handler) HandlerFunc {
 
 // Append appends the specified middleware funcs to the pipe
 func (m MiddlewareFunc) Append(n ...MiddlewareFunc) MiddlewareFunc {
-	return composite(append([]MiddlewareFunc{m}, n...))
+	return combine(append([]MiddlewareFunc{m}, n...))
 }
 
 // Then terminates the middleware pipe with the specified handler func
 func (m MiddlewareFunc) Then(h HandlerFunc) http.Handler {
+	h = m(h)
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := m(h)(w, r); err != nil {
+		if err := h(w, r); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	})
 }
 
-func composite(fns []MiddlewareFunc) MiddlewareFunc {
+func combine(m []MiddlewareFunc) MiddlewareFunc {
 	return func(h HandlerFunc) HandlerFunc {
-		for i := len(fns) - 1; i >= 0; i-- {
-			h = fns[i](h)
+		for i := len(m) - 1; i >= 0; i-- {
+			h = m[i](h)
 		}
 
 		return h

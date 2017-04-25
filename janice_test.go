@@ -4,70 +4,13 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
-	"log"
+ 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/stevecallear/janice"
 )
-
-func TestDefault(t *testing.T) {
-	rl := janice.RequestLogger
-	el := janice.ErrorLogger
-
-	defer func() {
-		janice.RequestLogger = rl
-		janice.ErrorLogger = el
-	}()
-
-	b := new(bytes.Buffer)
-
-	janice.RequestLogger = janice.NewLogger(log.New(b, "", 0), "")
-	janice.ErrorLogger = janice.NewLogger(log.New(b, "", 0), "")
-
-	tests := []struct {
-		panic error
-		err   error
-		code  int
-	}{
-		{
-			code: http.StatusOK,
-		},
-		{
-			panic: errors.New("panic"),
-			code:  http.StatusInternalServerError,
-		},
-		{
-			err:  errors.New("error"),
-			code: http.StatusInternalServerError,
-		},
-		{
-			err:  janice.NewStatusError(http.StatusNotFound, errors.New("error")),
-			code: http.StatusNotFound,
-		},
-	}
-
-	for tn, tt := range tests {
-		h := janice.Default().Then(func(w http.ResponseWriter, r *http.Request) error {
-			if tt.panic != nil {
-				panic(tt.panic)
-			}
-
-			return tt.err
-		})
-
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequest("GET", "/", nil)
-
-		h.ServeHTTP(rec, req)
-
-		if rec.Code != tt.code {
-			t.Errorf("Default(%d); got %d, expected %d", tn, rec.Code, tt.code)
-		}
-	}
-}
 
 func TestNew(t *testing.T) {
 	tests := []struct {
