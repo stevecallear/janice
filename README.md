@@ -23,14 +23,19 @@ import (
 )
 
 func main() {
-	mux := http.NewServeMux()
+	// create a default handler pipe
+	hp := janice.New(janice.ErrorHandling(), janice.ErrorLogging(janice.ErrorLogger))
 
-	mux.Handle("/", janice.New(middleware).Then(func(w http.ResponseWriter, r *http.Request) error {
+	mux := http.NewServeMux()
+	mux.Handle("/", hp.Append(middleware).Then(func(w http.ResponseWriter, r *http.Request) error {
 		fmt.Fprintf(w, "hello handler!\n")
 		return nil
 	}))
 
-	http.ListenAndServe(":8080", janice.Default().Then(janice.Wrap(mux)))
+	// create a default mux pipe
+	mp := janice.New(janice.Recovery(janice.ErrorLogger), janice.RequestLogging(janice.RequestLogger))
+
+	http.ListenAndServe(":8080", mp.Then(janice.Wrap(mux)))
 }
 
 func middleware(n janice.HandlerFunc) janice.HandlerFunc {
@@ -52,9 +57,6 @@ func (w http.ResponseWriter, r *http.Request) error
 ```
 This is commonly used in Go web apps to move error handling boilerplate outside of the handler func. The `janice.Wrap` function can be used to convert a `http.Handler` implementations into a `janice.HandlerFunc`.
 
-## Default Pipe
-The `janice.Default()` function returns a default middleware pipe, containing the following functionality:
-
 ### Error Logging
 Error logging writes any handler errors to the default error logger. The error itself is passed upwards to the next function in the pipe. A new error logging middleware function can be created using `janice.ErrorLogging()` with an appropriate logger.
 
@@ -72,5 +74,3 @@ Request logging writes the logs the current request metrics. Metrics are obtaine
 
 ### Recovery
 Recovery recovers from any panic that occurs throughout the middleware pipe. In the event of a panic the information will written to an error logger and a `http.StatusInternalServerError` code will be written to the response. New recovery middleware functions can be created using `janice.Recovery()` with an appropriate logger.
-
-
