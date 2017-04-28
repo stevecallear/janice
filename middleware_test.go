@@ -95,32 +95,47 @@ func TestRequestLogging(t *testing.T) {
 	tests := []struct {
 		method string
 		code   int
+		rpath  string
+		npath  string
 		err    error
 		exp    string
 	}{
 		{
 			method: "GET",
 			code:   http.StatusOK,
-			exp:    fmt.Sprintf("GET,%d\n", http.StatusOK),
+			rpath:  "/",
+			npath:  "/",
+			exp:    fmt.Sprintf("GET,/,%d\n", http.StatusOK),
 		},
 		{
 			method: "POST",
 			code:   http.StatusBadRequest,
-			exp:    fmt.Sprintf("POST,%d\n", http.StatusBadRequest),
+			rpath:  "/",
+			npath:  "/",
+			exp:    fmt.Sprintf("POST,/,%d\n", http.StatusBadRequest),
+		},
+		{
+			method: "GET",
+			code:   http.StatusOK,
+			rpath:  "/resource/",
+			npath:  "/",
+			exp:    fmt.Sprintf("GET,/resource/,%d\n", http.StatusOK),
 		},
 	}
 
 	for tn, tt := range tests {
 		h := func(w http.ResponseWriter, r *http.Request) error {
+			r.URL.Path = tt.npath
+
 			w.WriteHeader(tt.code)
 			return nil
 		}
 
 		b := new(bytes.Buffer)
-		l := janice.NewLogger(log.New(b, "", 0), "{{method}},{{code}}")
+		l := janice.NewLogger(log.New(b, "", 0), "{{method}},{{path}},{{code}}")
 
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(tt.method, "/", nil)
+		req := httptest.NewRequest(tt.method, tt.rpath, nil)
 
 		err := janice.RequestLogging(l)(h)(rec, req)
 

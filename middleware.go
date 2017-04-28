@@ -48,6 +48,14 @@ func Recovery(l Logger) MiddlewareFunc {
 func RequestLogging(l Logger) MiddlewareFunc {
 	return func(h HandlerFunc) HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) error {
+			d := map[string]interface{}{
+				"log_type": "request",
+				"time":     time.Now().UTC().Format(time.RFC3339),
+				"host":     r.Host,
+				"method":   r.Method,
+				"path":     r.URL.String(),
+			}
+
 			var err error
 			wh := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				err = h(w, r)
@@ -55,17 +63,11 @@ func RequestLogging(l Logger) MiddlewareFunc {
 
 			m := httpsnoop.CaptureMetrics(wh, w, r)
 
-			l.Log(map[string]interface{}{
-				"log_type": "request",
-				"time":     time.Now().UTC().Format(time.RFC3339),
-				"host":     r.Host,
-				"method":   r.Method,
-				"path":     r.URL.String(),
-				"code":     strconv.Itoa(m.Code),
-				"duration": m.Duration.String(),
-				"written":  strconv.FormatInt(m.Written, 10),
-			})
+			d["code"] = strconv.Itoa(m.Code)
+			d["duration"] = m.Duration.String()
+			d["written"] = strconv.FormatInt(m.Written, 10)
 
+			l.Log(d)
 			return err
 		}
 	}
