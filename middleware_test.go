@@ -39,6 +39,33 @@ func TestNewStatusError(t *testing.T) {
 	}
 }
 
+func TestStatusCode(t *testing.T) {
+	tests := []struct {
+		err error
+		exp int
+	}{
+		{
+			exp: http.StatusOK,
+		},
+		{
+			err: errors.New("error"),
+			exp: http.StatusInternalServerError,
+		},
+		{
+			err: janice.NewStatusError(http.StatusNotFound, errors.New("error")),
+			exp: http.StatusNotFound,
+		},
+	}
+
+	for tn, tt := range tests {
+		act := janice.StatusCode(tt.err)
+
+		if act != tt.exp {
+			t.Errorf("StatusCode(%d); got %d, expected %d", tn, act, tt.exp)
+		}
+	}
+}
+
 func TestRecovery(t *testing.T) {
 	tests := []struct {
 		panic error

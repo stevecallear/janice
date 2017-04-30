@@ -23,6 +23,21 @@ func NewStatusError(code int, err error) *StatusError {
 	}
 }
 
+// StatusCode returns a status code for the specified error
+// By default, nil errors return 200 while non-nil errors return 500
+// If the error is non-nil and a StatusError then the code will be returned
+func StatusCode(err error) int {
+	if err == nil {
+		return http.StatusOK
+	}
+
+	if serr, ok := err.(*StatusError); ok {
+		return serr.Code
+	}
+
+	return http.StatusInternalServerError
+}
+
 // Recovery returns a recovery middleware
 func Recovery(l Logger) MiddlewareFunc {
 	return func(h HandlerFunc) HandlerFunc {
@@ -78,12 +93,7 @@ func ErrorHandling() MiddlewareFunc {
 	return func(h HandlerFunc) HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) error {
 			if err := h(w, r); err != nil {
-				c := http.StatusInternalServerError
-				if serr, ok := err.(*StatusError); ok {
-					c = serr.Code
-				}
-
-				http.Error(w, err.Error(), c)
+				http.Error(w, err.Error(), StatusCode(err))
 			}
 
 			return nil
