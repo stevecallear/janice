@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/felixge/httpsnoop"
 )
@@ -44,10 +43,9 @@ func Recovery(l Logger) MiddlewareFunc {
 		return func(w http.ResponseWriter, r *http.Request) error {
 			defer func() {
 				if r := recover(); r != nil {
-					l.Log(map[string]interface{}{
-						"log_type": "panic",
-						"time":     time.Now().UTC().Format(time.RFC3339),
-						"error":    fmt.Sprintf("%v", r),
+					l.Error(Fields{
+						"type":  "recovery",
+						"error": fmt.Sprint(r),
 					})
 
 					w.WriteHeader(http.StatusInternalServerError)
@@ -63,13 +61,8 @@ func Recovery(l Logger) MiddlewareFunc {
 func RequestLogging(l Logger) MiddlewareFunc {
 	return func(h HandlerFunc) HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) error {
-			d := map[string]interface{}{
-				"log_type": "request",
-				"time":     time.Now().UTC().Format(time.RFC3339),
-				"host":     r.Host,
-				"method":   r.Method,
-				"path":     r.URL.String(),
-			}
+			// store the request url in case it is changed later in the middleware pipe
+			ru := r.URL.String()
 
 			var err error
 			wh := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -78,11 +71,16 @@ func RequestLogging(l Logger) MiddlewareFunc {
 
 			m := httpsnoop.CaptureMetrics(wh, w, r)
 
-			d["code"] = strconv.Itoa(m.Code)
-			d["duration"] = m.Duration.String()
-			d["written"] = strconv.FormatInt(m.Written, 10)
+			l.Info(Fields{
+				"type":     "request",
+				"host":     r.Host,
+				"method":   r.Method,
+				"path":     ru,
+				"code":     strconv.Itoa(m.Code),
+				"duration": m.Duration.String(),
+				"written":  strconv.FormatInt(m.Written, 10),
+			})
 
-			l.Log(d)
 			return err
 		}
 	}
@@ -108,13 +106,10 @@ func ErrorLogging(l Logger) MiddlewareFunc {
 			err := h(w, r)
 
 			if err != nil {
-				d := map[string]interface{}{
-					"log_type": "error",
-					"time":     time.Now().UTC().Format(time.RFC3339),
-					"error":    err.Error(),
-				}
-
-				l.Log(d)
+				l.Error(Fields{
+					"type":  "error",
+					"error": err.Error(),
+				})
 			}
 
 			return err
