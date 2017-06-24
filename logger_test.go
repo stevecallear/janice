@@ -3,6 +3,7 @@ package janice_test
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 	"testing"
 
 	"github.com/stevecallear/janice"
@@ -10,9 +11,10 @@ import (
 
 func TestLogger(t *testing.T) {
 	tests := []struct {
-		fn   func(janice.Logger)
-		keys []string
-		vals map[string]string
+		fn    func(janice.Logger)
+		keys  []string
+		vals  map[string]string
+		panic bool
 	}{
 		{
 			fn: func(l janice.Logger) {
@@ -38,11 +40,34 @@ func TestLogger(t *testing.T) {
 				"expected": "value",
 			},
 		},
+		{
+			fn: func(l janice.Logger) {
+				l.Info(janice.Fields{
+					"expected": math.Inf, // force panic
+				})
+			},
+			keys:  []string{},
+			vals:  map[string]string{},
+			panic: true,
+		},
 	}
 
 	for tn, tt := range tests {
 		b := new(bytes.Buffer)
-		tt.fn(janice.NewLogger(b))
+
+		func() {
+			defer func() {
+				r := recover()
+				if tt.panic && r == nil {
+					t.Errorf("Logger(%d); got nil, expected an error", tn)
+				}
+				if !tt.panic && r != nil {
+					t.Errorf("Logger(%d); got %v, expected nil", tn, r)
+				}
+			}()
+
+			tt.fn(janice.NewLogger(b))
+		}()
 
 		e := readLogEntry(b.Bytes())
 		if !e.hasKeys(tt.keys) {
