@@ -2,14 +2,13 @@ package janice
 
 import (
 	"encoding/json"
-	"io"
 	"log"
 	"os"
 	"time"
 )
 
 // DefaultLogger is the default logger
-var DefaultLogger = NewLogger(os.Stdout)
+var DefaultLogger = NewLogger(log.New(os.Stdout, "", 0))
 
 type (
 	// Fields represents a set of log fields
@@ -27,9 +26,9 @@ type (
 )
 
 // NewLogger returns a new logger
-func NewLogger(w io.Writer) Logger {
+func NewLogger(l *log.Logger) Logger {
 	return &logger{
-		Logger: log.New(w, "", 0),
+		Logger: l,
 	}
 }
 

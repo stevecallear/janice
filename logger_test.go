@@ -3,6 +3,7 @@ package janice_test
 import (
 	"bytes"
 	"encoding/json"
+	"log"
 	"math"
 	"testing"
 
@@ -66,7 +67,7 @@ func TestLogger(t *testing.T) {
 				}
 			}()
 
-			tt.fn(janice.NewLogger(b))
+			tt.fn(janice.NewLogger(log.New(b, "", 0)))
 		}()
 
 		e := readLogEntry(b.Bytes())
