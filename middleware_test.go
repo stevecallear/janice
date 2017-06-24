@@ -3,6 +3,7 @@ package janice_test
 import (
 	"bytes"
 	"errors"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -106,7 +107,7 @@ func TestRecovery(t *testing.T) {
 		}
 
 		b := new(bytes.Buffer)
-		l := janice.NewLogger(b)
+		l := janice.NewLogger(log.New(b, "", 0))
 
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest("GET", "/", nil)
@@ -186,7 +187,7 @@ func TestRequestLogging(t *testing.T) {
 		}
 
 		b := new(bytes.Buffer)
-		l := janice.NewLogger(b)
+		l := janice.NewLogger(log.New(b, "", 0))
 
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(tt.method, tt.rpath, nil)
@@ -280,7 +281,7 @@ func TestErrorLogging(t *testing.T) {
 		}
 
 		b := new(bytes.Buffer)
-		l := janice.NewLogger(b)
+		l := janice.NewLogger(log.New(b, "", 0))
 
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest("GET", "/", nil)
