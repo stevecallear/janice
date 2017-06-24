@@ -1,51 +1,54 @@
 package janice
 
 import (
+	"encoding/json"
+	"io"
 	"log"
 	"os"
-
-	"github.com/valyala/fasttemplate"
+	"time"
 )
 
-const (
-	// RequestLogFormat represents a default request log format
-	RequestLogFormat = `{"time":"{{time}}","log_type":"{{log_type}}","host":"{{host}}","method":"{{method}}","path":"{{path}}","code":"{{code}}","duration":"{{duration}}","written":"{{written}}"}`
-
-	// ErrorLogFormat represents a default error log format
-	ErrorLogFormat = `{"time":"{{time}}","log_type":"{{log_type}}","error":"{{error}}"}`
-)
-
-var (
-	// RequestLogger represents a default request logger
-	RequestLogger = NewLogger(log.New(os.Stdout, "", 0), RequestLogFormat)
-
-	// ErrorLogger represents a default error logger
-	ErrorLogger = NewLogger(log.New(os.Stderr, "", 0), ErrorLogFormat)
-)
+// DefaultLogger is the default logger
+var DefaultLogger = NewLogger(os.Stdout)
 
 type (
-	// Logger represents a formatting logger
+	// Fields represents a set of log fields
+	Fields map[string]interface{}
+
+	// Logger represents a basic structured logger
 	Logger interface {
-		Log(map[string]interface{})
+		Info(Fields)
+		Error(Fields)
 	}
 
-	templateLogger struct {
-		logger   *log.Logger
-		template *fasttemplate.Template
+	logger struct {
+		*log.Logger
 	}
 )
 
-// NewLogger returns a new Logger
-func NewLogger(l *log.Logger, template string) Logger {
-	t := fasttemplate.New(template, "{{", "}}")
-
-	return &templateLogger{
-		logger:   l,
-		template: t,
+// NewLogger returns a new logger
+func NewLogger(w io.Writer) Logger {
+	return &logger{
+		Logger: log.New(w, "", 0),
 	}
 }
 
-func (l *templateLogger) Log(v map[string]interface{}) {
-	s := l.template.ExecuteString(v)
-	l.logger.Println(s)
+func (l *logger) Info(f Fields) {
+	l.log("info", f)
+}
+
+func (l *logger) Error(f Fields) {
+	l.log("error", f)
+}
+
+func (l *logger) log(level string, f Fields) {
+	f["level"] = level
+	f["time"] = time.Now().UTC().Format(time.RFC3339)
+
+	b, err := json.Marshal(f)
+	if err != nil {
+		panic(err)
+	}
+
+	l.Println(string(b))
 }

@@ -3,10 +3,9 @@ package janice_test
 import (
 	"bytes"
 	"errors"
-	"fmt"
-	"log"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/stevecallear/janice"
@@ -71,17 +70,25 @@ func TestRecovery(t *testing.T) {
 		panic error
 		err   error
 		code  int
+		log   map[string]string
 	}{
 		{
 			code: http.StatusOK,
+			log:  map[string]string{},
 		},
 		{
 			panic: errors.New("panic"),
 			code:  http.StatusInternalServerError,
+			log: map[string]string{
+				"type":  "recovery",
+				"level": "error",
+				"error": "panic",
+			},
 		},
 		{
 			err:  errors.New("error"),
 			code: http.StatusOK,
+			log:  map[string]string{},
 		},
 	}
 
@@ -99,7 +106,7 @@ func TestRecovery(t *testing.T) {
 		}
 
 		b := new(bytes.Buffer)
-		l := janice.NewLogger(log.New(b, "", 0), "{{error}}")
+		l := janice.NewLogger(b)
 
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest("GET", "/", nil)
@@ -112,8 +119,10 @@ func TestRecovery(t *testing.T) {
 		if rec.Code != tt.code {
 			t.Errorf("Recovery(%d); got %d, expected %d", tn, rec.Code, tt.code)
 		}
-		if tt.panic != nil && b.String() != tt.panic.Error()+"\n" {
-			t.Errorf("Recovery(%d); got %s, expected %s", tn, b.String(), tt.panic.Error())
+
+		e := readLogEntry(b.Bytes())
+		if !e.hasValues(tt.log) {
+			t.Errorf("Recovery(%d); got %v, expected %v", tn, e, tt.log)
 		}
 	}
 }
@@ -125,28 +134,46 @@ func TestRequestLogging(t *testing.T) {
 		rpath  string
 		npath  string
 		err    error
-		exp    string
+		log    map[string]string
 	}{
 		{
 			method: "GET",
 			code:   http.StatusOK,
 			rpath:  "/",
 			npath:  "/",
-			exp:    fmt.Sprintf("GET,/,%d\n", http.StatusOK),
+			log: map[string]string{
+				"type":   "request",
+				"level":  "info",
+				"method": "GET",
+				"path":   "/",
+				"code":   strconv.Itoa(http.StatusOK),
+			},
 		},
 		{
 			method: "POST",
 			code:   http.StatusBadRequest,
 			rpath:  "/",
 			npath:  "/",
-			exp:    fmt.Sprintf("POST,/,%d\n", http.StatusBadRequest),
+			log: map[string]string{
+				"type":   "request",
+				"level":  "info",
+				"method": "POST",
+				"path":   "/",
+				"code":   strconv.Itoa(http.StatusBadRequest),
+			},
 		},
 		{
 			method: "GET",
 			code:   http.StatusOK,
 			rpath:  "/resource/",
 			npath:  "/",
-			exp:    fmt.Sprintf("GET,/resource/,%d\n", http.StatusOK),
+			log: map[string]string{
+				"type":   "request",
+				"level":  "info",
+				"method": "GET",
+				"path":   "/resource/",
+				"code":   strconv.Itoa(http.StatusOK),
+			},
 		},
 	}
 
@@ -159,7 +186,7 @@ func TestRequestLogging(t *testing.T) {
 		}
 
 		b := new(bytes.Buffer)
-		l := janice.NewLogger(log.New(b, "", 0), "{{method}},{{path}},{{code}}")
+		l := janice.NewLogger(b)
 
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(tt.method, tt.rpath, nil)
@@ -172,8 +199,10 @@ func TestRequestLogging(t *testing.T) {
 		if rec.Code != tt.code {
 			t.Errorf("RequestLogging(%d); got %d, expected %d", tn, rec.Code, tt.code)
 		}
-		if b.String() != tt.exp {
-			t.Errorf("RequestLogging(%d); got %s, expected %s", tn, b.String(), tt.exp)
+
+		e := readLogEntry(b.Bytes())
+		if !e.hasValues(tt.log) {
+			t.Errorf("RequestLogging(%d); got %v, expected %v", tn, e, tt.log)
 		}
 	}
 }
@@ -228,15 +257,20 @@ func TestErrorLogging(t *testing.T) {
 	tests := []struct {
 		err  error
 		code int
-		exp  string
+		log  map[string]string
 	}{
 		{
 			code: http.StatusOK,
+			log:  map[string]string{},
 		},
 		{
 			err:  errors.New("error"),
 			code: http.StatusOK,
-			exp:  "error\n",
+			log: map[string]string{
+				"type":  "error",
+				"level": "error",
+				"error": "error",
+			},
 		},
 	}
 
@@ -246,7 +280,7 @@ func TestErrorLogging(t *testing.T) {
 		}
 
 		b := new(bytes.Buffer)
-		l := janice.NewLogger(log.New(b, "", 0), "{{error}}")
+		l := janice.NewLogger(b)
 
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest("GET", "/", nil)
@@ -259,8 +293,10 @@ func TestErrorLogging(t *testing.T) {
 		if rec.Code != tt.code {
 			t.Errorf("ErrorLogging(%d); got %d, expected %d", tn, rec.Code, tt.code)
 		}
-		if b.String() != tt.exp {
-			t.Errorf("ErrorLogging(%d); got %s, expected %s", tn, b.String(), tt.exp)
+
+		e := readLogEntry(b.Bytes())
+		if !e.hasValues(tt.log) {
+			t.Errorf("ErrorLogging(%d); got %v, expected %v", tn, e, tt.log)
 		}
 	}
 }

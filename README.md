@@ -24,7 +24,7 @@ import (
 
 func main() {
 	// create a default handler pipe
-	hp := janice.New(janice.ErrorHandling(), janice.ErrorLogging(janice.ErrorLogger))
+	hp := janice.New(janice.ErrorHandling(), janice.ErrorLogging(janice.DefaultLogger))
 
 	mux := http.NewServeMux()
 	mux.Handle("/", hp.Append(middleware).Then(func(w http.ResponseWriter, r *http.Request) error {
@@ -33,7 +33,7 @@ func main() {
 	}))
 
 	// create a default mux pipe
-	mp := janice.New(janice.Recovery(janice.ErrorLogger), janice.RequestLogging(janice.RequestLogger))
+	mp := janice.New(janice.Recovery(janice.DefaultLogger), janice.RequestLogging(janice.DefaultLogger))
 
 	http.ListenAndServe(":8080", mp.Then(janice.Wrap(mux)))
 }
