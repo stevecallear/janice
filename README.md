@@ -1,6 +1,7 @@
 # Janice
 [![Build Status](https://travis-ci.org/stevecallear/janice.svg?branch=master)](https://travis-ci.org/stevecallear/janice)
 [![codecov](https://codecov.io/gh/stevecallear/janice/branch/master/graph/badge.svg)](https://codecov.io/gh/stevecallear/janice)
+[![Go Report Card](https://goreportcard.com/badge/github.com/stevecallear/janice)](https://goreportcard.com/report/github.com/stevecallear/janice)
 
 Janice provides a set of Go HTTP middleware functions to simplify the process of building web applications. It is heavily inspired by both [Alice](https://github.com/justinas/alice) and [Negroni](https://github.com/urfave/negroni), hence the name.
 
