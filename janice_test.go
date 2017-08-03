@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
- 	"io"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -93,22 +93,22 @@ func TestMiddlewareAppend(t *testing.T) {
 		exp string
 	}{
 		{
-			mwm: [][]string{[]string{}},
+			mwm: [][]string{{}},
 			msg: "a",
 			exp: "a",
 		},
 		{
-			mwm: [][]string{[]string{"a"}, []string{"b"}},
+			mwm: [][]string{{"a"}, {"b"}},
 			msg: "c",
 			exp: "abc",
 		},
 		{
-			mwm: [][]string{[]string{"a"}, []string{"b", "c"}},
+			mwm: [][]string{{"a"}, {"b", "c"}},
 			msg: "d",
 			exp: "abcd",
 		},
 		{
-			mwm: [][]string{[]string{"a"}, []string{"b", "c"}},
+			mwm: [][]string{{"a"}, {"b", "c"}},
 			msg: "d",
 			err: errors.New("error"),
 			exp: "abcd",
