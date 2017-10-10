@@ -2,6 +2,7 @@ package janice_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -14,194 +15,235 @@ import (
 
 func TestNew(t *testing.T) {
 	tests := []struct {
-		mwm []string
-		msg string
-		exp string
+		name       string
+		middleware []janice.MiddlewareFunc
+		handler    janice.HandlerFunc
+		exp        string
 	}{
 		{
-			mwm: []string{},
-			msg: "a",
-			exp: "a",
+			name:       "should allow empty slice",
+			middleware: []janice.MiddlewareFunc{},
+			handler:    newHandler("a", nil),
+			exp:        "a",
 		},
 		{
-			mwm: []string{"a"},
-			msg: "b",
-			exp: "ab",
+			name: "should apply middleware",
+			middleware: []janice.MiddlewareFunc{
+				newMiddleware("a", nil),
+			},
+			handler: newHandler("b", nil),
+			exp:     "ab",
 		},
 		{
-			mwm: []string{"a", "b"},
-			msg: "c",
-			exp: "abc",
+			name: "should apply middleware slice",
+			middleware: []janice.MiddlewareFunc{
+				newMiddleware("a", nil),
+				newMiddleware("b", nil),
+			},
+			handler: newHandler("c", nil),
+			exp:     "abc",
 		},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(st *testing.T) {
+			b := new(bytes.Buffer)
+			h := janice.New(tt.middleware...).Then(tt.handler)
 
-	for tn, tt := range tests {
-		b := new(bytes.Buffer)
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", "/", nil)
+			req = req.WithContext(context.WithValue(req.Context(), logContextKey, b))
 
-		mw := []janice.MiddlewareFunc{}
-		for _, msg := range tt.mwm {
-			mw = append(mw, newMiddleware(b, msg))
-		}
-
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequest("GET", "/", nil)
-
-		janice.New(mw...).Then(newHandler(b, tt.msg, nil)).ServeHTTP(rec, req)
-
-		if b.String() != tt.exp {
-			t.Errorf("New(%d); got %s, expected %s", tn, b.String(), tt.exp)
-		}
+			h.ServeHTTP(rec, req)
+			if b.String() != tt.exp {
+				st.Errorf("got %s, expected %s", b.String(), tt.exp)
+			}
+		})
 	}
 }
 
 func TestWrap(t *testing.T) {
 	tests := []struct {
+		name string
 		code int
 	}{
 		{
+			name: "should return a nil error",
 			code: http.StatusOK,
 		},
 		{
+			name: "should wrap the handler",
 			code: http.StatusNotFound,
 		},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(st *testing.T) {
+			h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tt.code)
+			})
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", "/", nil)
 
-	for tn, tt := range tests {
-		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(tt.code)
-		})
-
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequest("GET", "/", nil)
-
-		err := janice.Wrap(h)(rec, req)
-
-		if err != nil {
-			t.Errorf("Wrap(%d); got %v, expected nil", tn, err)
-		}
-		if rec.Code != tt.code {
-			t.Errorf("Wrap(%d); got %d, expected %d", tn, rec.Code, tt.code)
-		}
-	}
-}
-
-func TestMiddlewareAppend(t *testing.T) {
-	tests := []struct {
-		mwm [][]string
-		msg string
-		err error
-		exp string
-	}{
-		{
-			mwm: [][]string{{}},
-			msg: "a",
-			exp: "a",
-		},
-		{
-			mwm: [][]string{{"a"}, {"b"}},
-			msg: "c",
-			exp: "abc",
-		},
-		{
-			mwm: [][]string{{"a"}, {"b", "c"}},
-			msg: "d",
-			exp: "abcd",
-		},
-		{
-			mwm: [][]string{{"a"}, {"b", "c"}},
-			msg: "d",
-			err: errors.New("error"),
-			exp: "abcd",
-		},
-	}
-
-	for tn, tt := range tests {
-		b := new(bytes.Buffer)
-
-		var mw janice.MiddlewareFunc
-		for i, ms := range tt.mwm {
-			if i == 0 {
-				mw = janice.New(newMiddlewareSlice(b, ms)...)
-			} else {
-				mw = mw.Append(newMiddlewareSlice(b, ms)...)
+			err := janice.Wrap(h)(rec, req)
+			if err != nil {
+				st.Errorf("got %v, expected nil", err)
 			}
-		}
-
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequest("GET", "/", nil)
-
-		err := mw(newHandler(b, tt.msg, tt.err))(rec, req)
-
-		if err != tt.err {
-			t.Errorf("Append(%d); got %v, expected %v", tn, err, tt.err)
-		}
-		if b.String() != tt.exp {
-			t.Errorf("Append(%d); got %s, expected %s", tn, b.String(), tt.exp)
-		}
+			if rec.Code != tt.code {
+				st.Errorf("got %d, expected %d", rec.Code, tt.code)
+			}
+		})
 	}
 }
 
-func TestMiddlewareThen(t *testing.T) {
+func TestMiddlewareFunc_Append(t *testing.T) {
+	err := errors.New("error")
 	tests := []struct {
-		mwm  string
-		msg  string
-		err  error
-		code int
-		exp  string
+		name       string
+		middleware [][]janice.MiddlewareFunc
+		handler    janice.HandlerFunc
+		err        error
+		exp        string
 	}{
 		{
-			mwm:  "a",
-			msg:  "b",
-			code: http.StatusOK,
-			exp:  "ab",
+			name:       "should allow nil middleware",
+			middleware: [][]janice.MiddlewareFunc{{}},
+			handler:    newHandler("a", nil),
+			exp:        "a",
 		},
 		{
-			mwm:  "a",
-			msg:  "b",
-			err:  errors.New("error"),
-			code: http.StatusInternalServerError,
-			exp:  "ab",
+			name: "should append middleware",
+			middleware: [][]janice.MiddlewareFunc{
+				[]janice.MiddlewareFunc{
+					newMiddleware("a", nil),
+				},
+				[]janice.MiddlewareFunc{
+					newMiddleware("b", nil),
+				},
+			},
+			handler: newHandler("c", nil),
+			exp:     "abc",
+		},
+		{
+			name: "should append middleware slice",
+			middleware: [][]janice.MiddlewareFunc{
+				[]janice.MiddlewareFunc{
+					newMiddleware("a", nil),
+				},
+				[]janice.MiddlewareFunc{
+					newMiddleware("b", nil),
+					newMiddleware("c", nil),
+				},
+			},
+			handler: newHandler("d", nil),
+			exp:     "abcd",
+		},
+		{
+			name: "should pass errors through",
+			middleware: [][]janice.MiddlewareFunc{
+				[]janice.MiddlewareFunc{
+					newMiddleware("a", nil),
+				},
+				[]janice.MiddlewareFunc{
+					newMiddleware("b", err),
+					newMiddleware("c", nil),
+				},
+			},
+			handler: newHandler("d", nil),
+			err:     err,
+			exp:     "abcd",
 		},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(st *testing.T) {
+			b := new(bytes.Buffer)
+			var mw janice.MiddlewareFunc
+			for i, fn := range tt.middleware {
+				if i == 0 {
+					mw = janice.New(fn...)
+				} else {
+					mw = mw.Append(fn...)
+				}
+			}
 
-	for tn, tt := range tests {
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequest("GET", "/", nil)
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", "/", nil)
+			req = req.WithContext(context.WithValue(req.Context(), logContextKey, b))
 
-		b := new(bytes.Buffer)
-
-		h := newMiddleware(b, tt.mwm).Then(newHandler(b, tt.msg, tt.err))
-		h.ServeHTTP(rec, req)
-
-		if rec.Code != tt.code {
-			t.Errorf("Then(%d); got %d, expected %d", tn, rec.Code, tt.code)
-		}
-		if b.String() != tt.exp {
-			t.Errorf("Then(%d); got %s, expected %s", tn, b.String(), tt.exp)
-		}
+			err := mw(tt.handler)(rec, req)
+			if err != tt.err {
+				st.Errorf("got %v, expected %v", err, tt.err)
+			}
+			if b.String() != tt.exp {
+				st.Errorf("got %s, expected %s", b.String(), tt.exp)
+			}
+		})
 	}
 }
 
-func newHandler(log io.Writer, msg string, err error) janice.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) error {
-		fmt.Fprint(log, msg)
+func TestMiddlewareFunc_Then(t *testing.T) {
+	tests := []struct {
+		name       string
+		middleware janice.MiddlewareFunc
+		handler    janice.HandlerFunc
+		err        error
+		code       int
+		exp        string
+	}{
+		{
+			name:       "should wrap the handler",
+			middleware: newMiddleware("a", nil),
+			handler:    newHandler("b", nil),
+			code:       http.StatusOK,
+			exp:        "ab",
+		},
+		{
+			name:       "should handle errors",
+			middleware: newMiddleware("a", nil),
+			handler:    newHandler("b", errors.New("error")),
+			code:       http.StatusInternalServerError,
+			exp:        "ab",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(st *testing.T) {
+			b := bytes.NewBuffer(nil)
+			h := tt.middleware.Then(tt.handler)
+
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", "/", nil)
+			req = req.WithContext(context.WithValue(req.Context(), logContextKey, b))
+
+			h.ServeHTTP(rec, req)
+			if rec.Code != tt.code {
+				st.Errorf("got %d, expected %d", rec.Code, tt.code)
+			}
+			if b.String() != tt.exp {
+				st.Errorf("got %s, expected %s", b.String(), tt.exp)
+			}
+		})
+	}
+}
+
+type contextKey string
+
+var logContextKey = contextKey("log")
+
+func newHandler(msg string, err error) janice.HandlerFunc {
+	return func(_ http.ResponseWriter, r *http.Request) error {
+		l := r.Context().Value(logContextKey).(io.Writer)
+		fmt.Fprint(l, msg)
 		return err
 	}
 }
 
-func newMiddlewareSlice(log io.Writer, msgs []string) []janice.MiddlewareFunc {
-	fns := []janice.MiddlewareFunc{}
-	for _, msg := range msgs {
-		fns = append(fns, newMiddleware(log, msg))
-	}
-	return fns
-}
-
-func newMiddleware(log io.Writer, msg string) janice.MiddlewareFunc {
+func newMiddleware(msg string, err error) janice.MiddlewareFunc {
 	return func(n janice.HandlerFunc) janice.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) error {
-			fmt.Fprint(log, msg)
-			return n(w, r)
+			l := r.Context().Value(logContextKey).(io.Writer)
+			fmt.Fprint(l, msg)
+			if err := n(w, r); err != nil {
+				return err
+			}
+			return err
 		}
 	}
 }

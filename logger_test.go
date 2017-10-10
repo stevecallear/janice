@@ -5,104 +5,99 @@ import (
 	"encoding/json"
 	"log"
 	"math"
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stevecallear/janice"
 )
 
 func TestLogger(t *testing.T) {
+	now := time.Now()
 	tests := []struct {
+		name  string
 		fn    func(janice.Logger)
-		keys  []string
-		vals  map[string]string
 		panic bool
+		exp   map[string]string
 	}{
 		{
+			name: "should write info level logs",
 			fn: func(l janice.Logger) {
 				l.Info(janice.Fields{
 					"expected": "value",
 				})
 			},
-			keys: []string{"level", "time", "expected"},
-			vals: map[string]string{
+			exp: map[string]string{
 				"level":    "info",
 				"expected": "value",
+				"time":     now.UTC().Format(time.RFC3339),
 			},
 		},
 		{
+			name: "should write error level logs",
 			fn: func(l janice.Logger) {
 				l.Error(janice.Fields{
 					"expected": "value",
 				})
 			},
-			keys: []string{"level", "time", "expected"},
-			vals: map[string]string{
+			exp: map[string]string{
 				"level":    "error",
 				"expected": "value",
+				"time":     now.UTC().Format(time.RFC3339),
 			},
 		},
 		{
+			name: "should panic when value cannot be serialized",
 			fn: func(l janice.Logger) {
 				l.Info(janice.Fields{
 					"expected": math.Inf, // force panic
 				})
 			},
-			keys:  []string{},
-			vals:  map[string]string{},
 			panic: true,
+			exp:   map[string]string{},
 		},
 	}
-
-	for tn, tt := range tests {
-		b := new(bytes.Buffer)
-
-		func() {
-			defer func() {
-				r := recover()
-				if tt.panic && r == nil {
-					t.Errorf("Logger(%d); got nil, expected an error", tn)
+	for _, tt := range tests {
+		t.Run(tt.name, func(st *testing.T) {
+			withTime(now, func() {
+				defer func() {
+					err := recover()
+					if tt.panic && err == nil {
+						st.Error("got nil, expected an error")
+					}
+					if !tt.panic && err != nil {
+						st.Errorf("got %v, expected nil", err)
+					}
+				}()
+				b := new(bytes.Buffer)
+				tt.fn(janice.NewLogger(log.New(b, "", 0)))
+				act := parseLogEntry(b.Bytes())
+				if !reflect.DeepEqual(act, tt.exp) {
+					st.Errorf("got %v, expected %v", act, tt.exp)
 				}
-				if !tt.panic && r != nil {
-					t.Errorf("Logger(%d); got %v, expected nil", tn, r)
-				}
-			}()
-
-			tt.fn(janice.NewLogger(log.New(b, "", 0)))
-		}()
-
-		e := readLogEntry(b.Bytes())
-		if !e.hasKeys(tt.keys) {
-			t.Errorf("Logger(%d); got %v, expected %v", tn, e, tt.keys)
-		}
-		if !e.hasValues(tt.vals) {
-			t.Errorf("Logger(%d); got %v, expected %v", tn, e, tt.vals)
-		}
+			})
+		})
 	}
 }
 
-type logEntry map[string]string
-
-func readLogEntry(b []byte) logEntry {
-	e := logEntry{}
-	json.Unmarshal(b, &e)
-	return e
+func withTime(t time.Time, fn func()) {
+	tfn := janice.Now
+	defer func() {
+		janice.Now = tfn
+	}()
+	janice.Now = func() time.Time {
+		return t
+	}
+	fn()
 }
 
-func (e logEntry) hasKeys(ks []string) bool {
-	for _, k := range ks {
-		if _, ok := e[k]; !ok {
-			return false
-		}
+func parseLogEntry(b []byte) map[string]string {
+	m := map[string]string{}
+	if len(b) < 1 {
+		return m
 	}
-	return len(e) == len(ks)
-}
-
-func (e logEntry) hasValues(vm map[string]string) bool {
-	for k, v := range vm {
-		sv, ok := e[k]
-		if !ok || sv != v {
-			return false
-		}
+	if err := json.Unmarshal(b, &m); err != nil {
+		panic(err)
 	}
-	return true
+	return m
 }
