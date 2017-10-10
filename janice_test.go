@@ -112,10 +112,10 @@ func TestMiddlewareFunc_Append(t *testing.T) {
 		{
 			name: "should append middleware",
 			middleware: [][]janice.MiddlewareFunc{
-				[]janice.MiddlewareFunc{
+				{
 					newMiddleware("a", nil),
 				},
-				[]janice.MiddlewareFunc{
+				{
 					newMiddleware("b", nil),
 				},
 			},
@@ -125,10 +125,10 @@ func TestMiddlewareFunc_Append(t *testing.T) {
 		{
 			name: "should append middleware slice",
 			middleware: [][]janice.MiddlewareFunc{
-				[]janice.MiddlewareFunc{
+				{
 					newMiddleware("a", nil),
 				},
-				[]janice.MiddlewareFunc{
+				{
 					newMiddleware("b", nil),
 					newMiddleware("c", nil),
 				},
@@ -139,10 +139,10 @@ func TestMiddlewareFunc_Append(t *testing.T) {
 		{
 			name: "should pass errors through",
 			middleware: [][]janice.MiddlewareFunc{
-				[]janice.MiddlewareFunc{
+				{
 					newMiddleware("a", nil),
 				},
-				[]janice.MiddlewareFunc{
+				{
 					newMiddleware("b", err),
 					newMiddleware("c", nil),
 				},
