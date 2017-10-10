@@ -29,11 +29,9 @@ func StatusCode(err error) int {
 	if err == nil {
 		return http.StatusOK
 	}
-
 	if serr, ok := err.(*StatusError); ok {
 		return serr.Code
 	}
-
 	return http.StatusInternalServerError
 }
 
@@ -61,26 +59,21 @@ func Recovery(l Logger) MiddlewareFunc {
 func RequestLogging(l Logger) MiddlewareFunc {
 	return func(h HandlerFunc) HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) error {
-			// store the request url in case it is changed later in the middleware pipe
-			ru := r.URL.String()
-
+			p := r.URL.String() // store the request path in case it is changed later
 			var err error
 			wh := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				err = h(w, r)
 			})
-
 			m := httpsnoop.CaptureMetrics(wh, w, r)
-
 			l.Info(Fields{
 				"type":     "request",
 				"host":     r.Host,
 				"method":   r.Method,
-				"path":     ru,
+				"path":     p,
 				"code":     strconv.Itoa(m.Code),
 				"duration": m.Duration.String(),
 				"written":  strconv.FormatInt(m.Written, 10),
 			})
-
 			return err
 		}
 	}
@@ -93,7 +86,6 @@ func ErrorHandling() MiddlewareFunc {
 			if err := h(w, r); err != nil {
 				http.Error(w, err.Error(), StatusCode(err))
 			}
-
 			return nil
 		}
 	}
@@ -104,14 +96,12 @@ func ErrorLogging(l Logger) MiddlewareFunc {
 	return func(h HandlerFunc) HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) error {
 			err := h(w, r)
-
 			if err != nil {
 				l.Error(Fields{
 					"type":  "error",
 					"error": err.Error(),
 				})
 			}
-
 			return err
 		}
 	}
