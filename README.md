@@ -19,6 +19,7 @@ Janice uses the following signature for HTTP handler functions. This allows erro
 func(w http.ResponseWriter, r *http.Request) error
 ```
 
+## Middleware
 Middleware functions simply return a handler that wraps in input function with additional logic, for example:
 ```
 func middleware(n janice.HandlerFunc) janice.HandlerFunc {
@@ -31,11 +32,30 @@ func middleware(n janice.HandlerFunc) janice.HandlerFunc {
 }
 ```
 
+Middleware can be combined using either the `New` or `Append` functions, for example:
+```
+a := janice.New(m1, m2)
+b := a.Append(m3)
+c := a.Append(m4, m5)
+```
+
+Middleware chains can be converted to an `http.Handler` implementation using the `Then` function. By default any errors that make it through the middleware chain will result in `http.StatusInternalServerError` being written to the response. It is possible to customise this using the `ErrorFn` property. For example, the following will log any errors, leaving the status code unchanged:
+```
+h := janice.New(middlewareFunc).Then(handlerFunc)
+h.ErrorFn = func(_ http.ResponseWriter, _ *http.Request, err error) {
+	log.Printf("error: %v", err)
+}
+```
+
+`janice.Wrap` and `janice.WrapFunc` allow `http.Handler` and `http.HandlerFunc` implementations to be used in middleware chains. For example:
+```
+mux := http.NewServeMux()
+mux.Handle("/", handler)
+janice.New(middleware).Then(janice.Wrap(mux))
+```
+
 ## Example
 The following example creates two middleware chains: the first is applied to the route and handles any errors returned by the handler function, while the second is applied to the mux to log incoming requests.
-
-Each call to `Then` converts the middleware chain to an `http.Handler` implementation allowing it to be used with the standard HTTP packages, or third party structures such as routers. Conversely `janice.Wrap` can be used to convert an `http.Handler` implementation to a `janice.HandlerFunc`, allowing it to be used with a middleware chain.
-
 ```
 package main
 
