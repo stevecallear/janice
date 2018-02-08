@@ -3,75 +3,95 @@
 [![codecov](https://codecov.io/gh/stevecallear/janice/branch/master/graph/badge.svg)](https://codecov.io/gh/stevecallear/janice)
 [![Go Report Card](https://goreportcard.com/badge/github.com/stevecallear/janice)](https://goreportcard.com/report/github.com/stevecallear/janice)
 
-Janice provides a set of Go HTTP middleware functions to simplify the process of building web applications. It is heavily inspired by both [Alice](https://github.com/justinas/alice) and [Negroni](https://github.com/urfave/negroni), hence the name.
+Janice simplifies middleware chaining in Go HTTP applications. It is heavily inspired by both [Alice](https://github.com/justinas/alice) and [Negroni](https://github.com/urfave/negroni), but with a focus on simplifying handler functions by removing error handling boilerplate.
 
-## Getting Started
-
-### Installation
+## Getting started
 ```
 go get github.com/stevecallear/janice
 ```
+```
+http.ListenAndServe(":8080", janice.New(middlewareFunc).Then(handlerFunc))
+```
 
-### Usage
+## Handlers
+Janice uses the following signature for HTTP handler functions. This allows error handling to be moved outside of handler functions and into common middleware:
+```
+func(w http.ResponseWriter, r *http.Request) error
+```
+
+## Middleware
+Middleware functions simply return a handler that wraps in input function with additional logic, for example:
+```
+func middleware(n janice.HandlerFunc) janice.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		log.Println("before handler")
+		err := n(w, r)
+		log.Println("after handler")
+		return err
+	}
+}
+```
+
+Middleware can be combined using either the `New` or `Append` functions, for example:
+```
+a := janice.New(m1, m2)
+b := a.Append(m3)
+c := a.Append(m4, m5)
+```
+
+Middleware chains can be converted to an `http.Handler` implementation using the `Then` function. By default any errors that make it through the middleware chain will result in `http.StatusInternalServerError` being written to the response. It is possible to customise this using the `ErrorFn` property. For example, the following will log any errors, leaving the status code unchanged:
+```
+h := janice.New(middlewareFunc).Then(handlerFunc)
+h.ErrorFn = func(_ http.ResponseWriter, _ *http.Request, err error) {
+	log.Printf("error: %v", err)
+}
+```
+
+`janice.Wrap` and `janice.WrapFunc` allow `http.Handler` and `http.HandlerFunc` implementations to be used in middleware chains. For example:
+```
+mux := http.NewServeMux()
+mux.Handle("/", handler)
+janice.New(middleware).Then(janice.Wrap(mux))
+```
+
+## Example
+The following example creates two middleware chains: the first is applied to the route and handles any errors returned by the handler function, while the second is applied to the mux to log incoming requests.
 ```
 package main
 
 import (
-	"fmt"
+	"errors"
+	"log"
 	"net/http"
 
 	"github.com/stevecallear/janice"
 )
 
 func main() {
-	// create a default handler pipe
-	hp := janice.New(janice.ErrorHandling(), janice.ErrorLogging(janice.DefaultLogger))
-
 	mux := http.NewServeMux()
-	mux.Handle("/", hp.Append(middleware).Then(func(w http.ResponseWriter, r *http.Request) error {
-		fmt.Fprintf(w, "hello handler!\n")
+	mux.Handle("/", janice.New(errorHandling).Then(func(w http.ResponseWriter, r *http.Request) error {
+		if e := r.URL.Query().Get("err"); e != "" {
+			return errors.New(e)
+		}
 		return nil
 	}))
-
-	// create a default mux pipe
-	mp := janice.New(janice.Recovery(janice.DefaultLogger), janice.RequestLogging(janice.DefaultLogger))
-
-	http.ListenAndServe(":8080", mp.Then(janice.Wrap(mux)))
+	http.ListenAndServe(":8080", janice.New(requestLogging).Then(janice.Wrap(mux)))
 }
 
-func middleware(n janice.HandlerFunc) janice.HandlerFunc {
+func requestLogging(n janice.HandlerFunc) janice.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) error {
-		fmt.Fprint(w, "hello middleware!\n")
+		log.Printf("%s %s\n", r.Method, r.URL.Path)
 		return n(w, r)
 	}
 }
-```
 
-## Middleware
-Janice middleware has the following signature:
-```
-func (next janice.HandlerFunc) janice.HandlerFunc
-```
-With `janice.HandlerFunc` having the signature:
-```
-func (w http.ResponseWriter, r *http.Request) error
-```
-This is commonly used in Go web apps to move error handling boilerplate outside of the handler func. The `janice.Wrap` function can be used to convert a `http.Handler` implementations into a `janice.HandlerFunc`.
-
-### Error Logging
-Error logging writes any handler errors to the default error logger. The error itself is passed upwards to the next function in the pipe. A new error logging middleware function can be created using `janice.ErrorLogging()` with an appropriate logger.
-
-### Error Handling
-Error handling handles any errors returned by the inner handlers. By default, the error text will be written to the response along with an `http.StatusInternalServerError` status code. If a `janice.StatusError` is returned, then the associated status code will be used:
-```
-func myHandler(_ http.ResponseWriter, _ *http.Request) error {
-	return janice.NewStatusError(http.StatusNotFound, errors.New("not found"))
+func errorHandling(n janice.HandlerFunc) janice.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		if err := n(w, r); err != nil {
+			log.Println(err)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		return nil
+	}
 }
 ```
-A new error handling middleware function can be created using `janice.ErrorHandling()`.
-
-### Request Logging
-Request logging writes the logs the current request metrics. Metrics are obtained using [httpsnoop](https://github.com/felixge/httpsnoop) and log entries are written to a JSON templated request logger by default. New request logging middleware functions can be created using `janice.RequestLogging()` with an appropriate logger.
-
-### Recovery
-Recovery recovers from any panic that occurs throughout the middleware pipe. In the event of a panic the information will written to an error logger and a `http.StatusInternalServerError` code will be written to the response. New recovery middleware functions can be created using `janice.Recovery()` with an appropriate logger.

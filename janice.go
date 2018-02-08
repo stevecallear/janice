@@ -1,21 +1,38 @@
 package janice
 
-import "net/http"
+import (
+	"net/http"
+)
 
 type (
+	// Handler represents an HTTP handler
+	Handler struct {
+		ErrorFn   func(http.ResponseWriter, *http.Request, error)
+		handlerFn HandlerFunc
+	}
+
 	// HandlerFunc represents an HTTP handler func
 	HandlerFunc func(http.ResponseWriter, *http.Request) error
 
-	// MiddlewareFunc represents a middleware func
+	// MiddlewareFunc represents an HTTP middleware func
 	MiddlewareFunc func(HandlerFunc) HandlerFunc
 )
 
-// New returns a new middleware pipe
+// New returns a new middleware chain containing the specifed functions
 func New(m ...MiddlewareFunc) MiddlewareFunc {
-	return merge(m)
+	switch len(m) {
+	case 0:
+		return func(h HandlerFunc) HandlerFunc {
+			return h
+		}
+	case 1:
+		return m[0]
+	default:
+		return merge(m)
+	}
 }
 
-// Wrap wraps the specified handler, allowing it to be used with middleware
+// Wrap wraps the specified HTTP handler
 func Wrap(h http.Handler) HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		h.ServeHTTP(w, r)
@@ -23,19 +40,33 @@ func Wrap(h http.Handler) HandlerFunc {
 	}
 }
 
-// Append appends the specified middleware funcs to the pipe
+// WrapFunc wraps the specified HTTP handler function
+func WrapFunc(h http.HandlerFunc) HandlerFunc {
+	return Wrap(h)
+}
+
+func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if err := h.handlerFn(w, r); err != nil {
+		h.ErrorFn(w, r, err)
+	}
+}
+
+// Append appends the specified middleware function to the chain
 func (m MiddlewareFunc) Append(n ...MiddlewareFunc) MiddlewareFunc {
+	if len(n) < 1 {
+		return m
+	}
 	return merge(append([]MiddlewareFunc{m}, n...))
 }
 
-// Then terminates the middleware pipe with the specified handler func
-func (m MiddlewareFunc) Then(h HandlerFunc) http.Handler {
-	h = m(h)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := h(w, r); err != nil {
+// Then wraps the specified handler with the middleware chain
+func (m MiddlewareFunc) Then(h HandlerFunc) *Handler {
+	return &Handler{
+		ErrorFn: func(w http.ResponseWriter, _ *http.Request, err error) {
 			w.WriteHeader(http.StatusInternalServerError)
-		}
-	})
+		},
+		handlerFn: m(h),
+	}
 }
 
 func merge(m []MiddlewareFunc) MiddlewareFunc {
