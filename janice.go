@@ -18,7 +18,7 @@ type (
 	MiddlewareFunc func(HandlerFunc) HandlerFunc
 )
 
-// New returns a new middleware chain containing the specifed functions
+// New returns a new middleware chain containing the specified functions
 func New(m ...MiddlewareFunc) MiddlewareFunc {
 	switch len(m) {
 	case 0:
