@@ -13,6 +13,7 @@ import (
 
 func TestNew(t *testing.T) {
 	err := errors.New("error")
+
 	tests := []struct {
 		name       string
 		middleware []janice.MiddlewareFunc
@@ -54,13 +55,17 @@ func TestNew(t *testing.T) {
 			err:       err,
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			chain := janice.New(tt.middleware...)
+
 			rec, req := newResponseRecorder(), httptest.NewRequest("GET", "/", nil)
+
 			if err := chain(tt.handlerFn)(rec, req); err != tt.err {
 				t.Errorf("got %v, expected %v", err, tt.err)
 			}
+
 			if rec.body.String() != tt.body {
 				t.Errorf("got %s, expected %s", rec.body.String(), tt.body)
 			}
@@ -71,14 +76,18 @@ func TestNew(t *testing.T) {
 func TestWrap(t *testing.T) {
 	t.Run("should invoke the handler and return a nil error", func(t *testing.T) {
 		const body = "body"
+
 		h := janice.Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprint(w, body)
 		}))
+
 		rec, req := newResponseRecorder(), httptest.NewRequest("GET", "/", nil)
 		h(rec, req)
+
 		if rec.code != http.StatusOK {
 			t.Errorf("got %d, expected %d", rec.code, http.StatusOK)
 		}
+
 		if rec.body.String() != body {
 			t.Errorf("got %s, expected %s", rec.body.String(), body)
 		}
@@ -88,14 +97,18 @@ func TestWrap(t *testing.T) {
 func TestWrapFunc(t *testing.T) {
 	t.Run("should invoke the handler and return a nil error", func(t *testing.T) {
 		const body = "body"
+
 		h := janice.WrapFunc(func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprint(w, body)
 		})
+
 		rec, req := newResponseRecorder(), httptest.NewRequest("GET", "/", nil)
 		h(rec, req)
+
 		if rec.code != http.StatusOK {
 			t.Errorf("got %d, expected %d", rec.code, http.StatusOK)
 		}
+
 		if rec.body.String() != body {
 			t.Errorf("got %s, expected %s", rec.body.String(), body)
 		}
@@ -152,10 +165,13 @@ func TestMiddlewareFunc_Append(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			chain := tt.middleware[0].Append(tt.middleware[1:]...)
+
 			rec, req := newResponseRecorder(), httptest.NewRequest("GET", "/", nil)
+
 			if err := chain(tt.handlerFn)(rec, req); err != tt.err {
 				t.Errorf("got %v, expected %v", err, tt.err)
 			}
+
 			if rec.body.String() != tt.body {
 				t.Errorf("got %s, expected %s", rec.body.String(), tt.body)
 			}
@@ -212,16 +228,20 @@ func TestMiddlewareFunc_Then(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := janice.New(tt.middleware...).Then(tt.handlerFn)
+
 			if tt.errorFn != nil {
 				h.ErrorFn = func(_ http.ResponseWriter, _ *http.Request, err error) {
 					tt.errorFn(t, err)
 				}
 			}
+
 			rec, req := newResponseRecorder(), httptest.NewRequest("GET", "/", nil)
 			h.ServeHTTP(rec, req)
+
 			if rec.code != tt.code {
 				t.Errorf("got %d, expected %d", rec.code, tt.code)
 			}
+
 			if rec.body.String() != tt.body {
 				t.Errorf("got %s, expected %s", rec.body.String(), tt.body)
 			}
@@ -242,8 +262,10 @@ func benchmarkNew(b *testing.B, n int) {
 	for i := 0; i < n; i++ {
 		mw[i] = newMiddlewareFunc(fmt.Sprintf("mw%d", i))
 	}
+
 	h := janice.New(mw...).Then(newHandler("h").handle)
 	b.ResetTimer()
+
 	for i := 0; i < b.N; i++ {
 		rec, req := newResponseRecorder(), httptest.NewRequest("GET", "/", nil)
 		h.ServeHTTP(rec, req)
@@ -263,8 +285,10 @@ func benchmarkAppendSingle(b *testing.B, n int) {
 	for i := 0; i < n; i++ {
 		chain = chain.Append(newMiddlewareFunc(fmt.Sprintf("mw%d", i)))
 	}
+
 	h := chain.Then(newHandler("h").handle)
 	b.ResetTimer()
+
 	for i := 0; i < b.N; i++ {
 		rec, req := newResponseRecorder(), httptest.NewRequest("GET", "/", nil)
 		h.ServeHTTP(rec, req)
@@ -284,8 +308,10 @@ func benchmarkAppendMultiple(b *testing.B, n int) {
 	for i := 0; i < n; i++ {
 		mw[i] = newMiddlewareFunc(fmt.Sprintf("mw%d", i))
 	}
+
 	h := janice.New().Append(mw...).Then(newHandler("h").handle)
 	b.ResetTimer()
+
 	for i := 0; i < b.N; i++ {
 		rec, req := newResponseRecorder(), httptest.NewRequest("GET", "/", nil)
 		h.ServeHTTP(rec, req)
@@ -297,6 +323,7 @@ type (
 		code int
 		body *bytes.Buffer
 	}
+
 	handler struct {
 		name string
 		err  error
@@ -328,11 +355,13 @@ func newHandler(name string) handler {
 
 func (h handler) withErr(err error) handler {
 	h.err = err
+
 	return h
 }
 
 func (h handler) handle(w http.ResponseWriter, r *http.Request) error {
 	fmt.Fprintf(w, "|%s|", h.name)
+
 	return h.err
 }
 
@@ -340,8 +369,11 @@ func newMiddlewareFunc(name string) janice.MiddlewareFunc {
 	return func(n janice.HandlerFunc) janice.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) error {
 			fmt.Fprintf(w, "|%s:before|", name)
+
 			err := n(w, r)
+
 			fmt.Fprintf(w, "|%s:after|", name)
+
 			return err
 		}
 	}
