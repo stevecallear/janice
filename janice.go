@@ -36,6 +36,7 @@ func New(m ...MiddlewareFunc) MiddlewareFunc {
 func Wrap(h http.Handler) HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		h.ServeHTTP(w, r)
+
 		return nil
 	}
 }
@@ -56,6 +57,7 @@ func (m MiddlewareFunc) Append(n ...MiddlewareFunc) MiddlewareFunc {
 	if len(n) < 1 {
 		return m
 	}
+
 	return merge(append([]MiddlewareFunc{m}, n...))
 }
 
@@ -74,6 +76,7 @@ func merge(m []MiddlewareFunc) MiddlewareFunc {
 		for i := len(m) - 1; i >= 0; i-- {
 			h = m[i](h)
 		}
+
 		return h
 	}
 }
